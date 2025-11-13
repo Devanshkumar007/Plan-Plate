@@ -7,18 +7,18 @@ import android.widget.TextView
 import android.widget.Toast
 import com.google.android.material.textfield.TextInputEditText
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
 
 class LoginActivity : AppCompatActivity() {
 
-    private lateinit var auth: FirebaseAuth
+    private lateinit var db: DBHelper
+    private lateinit var session: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        // Initialize Firebase Auth
-        auth = FirebaseAuth.getInstance()
+        db = DBHelper(this)
+        session = SessionManager(this)
 
         // Find Views
         val inputEmail = findViewById<TextInputEditText>(R.id.inputEmail)
@@ -37,23 +37,20 @@ class LoginActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            auth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
+            if (db.validateUser(email, password)) {
+                session.setCurrentUser(email)
+                Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
 
-                        // Navigate to Home Screen (replace with actual activity)
-                        val intent = Intent(this, MainActivity::class.java)
-                        startActivity(intent)
-                        finish()
-                    } else {
-                        Toast.makeText(
-                            this,
-                            "Login Failed: ${task.exception?.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
+                val intent = Intent(this, MainActivity::class.java)
+                startActivity(intent)
+                finish()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Login Failed: invalid credentials",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
 
         // Redirect to Sign Up
@@ -62,20 +59,9 @@ class LoginActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        // Forgot Password
+        // Forgot Password (offline app cannot send email)
         tvForgotPassword.setOnClickListener {
-            val email = inputEmail.text.toString().trim()
-            if (email.isEmpty()) {
-                Toast.makeText(this, "Enter your email to reset password", Toast.LENGTH_SHORT).show()
-            } else {
-                auth.sendPasswordResetEmail(email)
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "Reset link sent to your email", Toast.LENGTH_LONG).show()
-                    }
-                    .addOnFailureListener {
-                        Toast.makeText(this, "Error: ${it.message}", Toast.LENGTH_LONG).show()
-                    }
-            }
+            Toast.makeText(this, "Offline app: password reset is not available", Toast.LENGTH_SHORT).show()
         }
     }
 }

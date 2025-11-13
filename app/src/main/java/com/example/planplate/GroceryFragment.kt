@@ -7,14 +7,13 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import org.json.JSONArray
 
 class GroceryFragment : Fragment() {
 
-    private lateinit var db: FirebaseFirestore
-    private lateinit var auth: FirebaseAuth
     private lateinit var groceryContainer: LinearLayout
+    private lateinit var db: DBHelper
+    private lateinit var session: SessionManager
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -22,10 +21,8 @@ class GroceryFragment : Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_grocery, container, false)
 
-        // Initialize Firebase instances
-        db = FirebaseFirestore.getInstance()
-        auth = FirebaseAuth.getInstance()
-
+        db = DBHelper(requireContext())
+        session = SessionManager(requireContext())
         groceryContainer = view.findViewById(R.id.groceryContainer)
 
         loadGroceries()
@@ -34,9 +31,8 @@ class GroceryFragment : Fragment() {
     }
 
     private fun loadGroceries() {
-        val currentUser = auth.currentUser
+        val currentUser = session.getCurrentUser()
         if (currentUser == null) {
-            // User not logged in, show message
             val textView = TextView(requireContext()).apply {
                 text = "⚠️ Please log in to view your grocery list."
                 setPadding(12, 8, 12, 8)
@@ -46,47 +42,56 @@ class GroceryFragment : Fragment() {
             return
         }
 
-        val userId = currentUser.uid
+        val plan = db.getLatestPlan(currentUser)
+        groceryContainer.removeAllViews()
 
-        // Fetch groceries under the current user's document
-        db.collection("users").document(userId)
-            .collection("plans").document("latest_plan")
-            .get()
-            .addOnSuccessListener { doc ->
-                groceryContainer.removeAllViews()
-
-                if (doc.exists()) {
-                    val groceries = doc.get("grocery_list") as? List<Map<String, Any>>
-                    if (groceries.isNullOrEmpty()) {
-                        val emptyView = TextView(requireContext()).apply {
-                            text = "🛒 No grocery items found."
-                            setPadding(12, 8, 12, 8)
-                        }
-                        groceryContainer.addView(emptyView)
-                    } else {
-                        groceries.forEach { item ->
-                            val textView = TextView(requireContext()).apply {
-                                text = "✅ ${item["item"]} - ${item["quantity"]}"
-                                setPadding(12, 8, 12, 8)
-                            }
-                            groceryContainer.addView(textView)
-                        }
-                    }
-                } else {
-                    val textView = TextView(requireContext()).apply {
-                        text = "No grocery plan found yet."
-                        setPadding(12, 8, 12, 8)
-                    }
-                    groceryContainer.addView(textView)
-                }
+        if (plan == null) {
+            val textView = TextView(requireContext()).apply {
+                text = "🛒 No grocery items found."
+                setPadding(12, 8, 12, 8)
             }
-            .addOnFailureListener { e ->
-                groceryContainer.removeAllViews()
-                val errorView = TextView(requireContext()).apply {
-                    text = "❌ Failed to load groceries: ${e.message}"
+            groceryContainer.addView(textView)
+            return
+        }
+
+        val groceryJson = plan.second
+        if (groceryJson.isEmpty()) {
+            val emptyView = TextView(requireContext()).apply {
+                text = "🛒 No grocery items found."
+                setPadding(12, 8, 12, 8)
+            }
+            groceryContainer.addView(emptyView)
+            return
+        }
+
+        try {
+            val arr = JSONArray(groceryJson)
+            if (arr.length() == 0) {
+                val emptyView = TextView(requireContext()).apply {
+                    text = "🛒 No grocery items found."
                     setPadding(12, 8, 12, 8)
                 }
-                groceryContainer.addView(errorView)
+                groceryContainer.addView(emptyView)
+                return
             }
+
+            for (i in 0 until arr.length()) {
+                val itemObj = arr.getJSONObject(i)
+                val item = itemObj.optString("item", "Unknown")
+                val qty = itemObj.optString("quantity", "")
+                val textView = TextView(requireContext()).apply {
+                    text = "✅ $item${if (qty.isNotEmpty()) " - $qty" else ""}"
+                    setPadding(12, 8, 12, 8)
+                }
+                groceryContainer.addView(textView)
+            }
+
+        } catch (e: Exception) {
+            val errorView = TextView(requireContext()).apply {
+                text = "❌ Failed to load groceries: ${e.message}"
+                setPadding(12, 8, 12, 8)
+            }
+            groceryContainer.addView(errorView)
+        }
     }
 }

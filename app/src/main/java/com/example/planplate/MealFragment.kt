@@ -9,16 +9,16 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.Button
-import androidx.cardview.widget.CardView
 import androidx.fragment.app.Fragment
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.auth.FirebaseAuth
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MealFragment : Fragment() {
 
-    private lateinit var db: FirebaseFirestore
     private lateinit var tvEmptyPlan: TextView
     private lateinit var mealContainer: LinearLayout
+    private lateinit var db: DBHelper
+    private lateinit var session: SessionManager
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -26,10 +26,12 @@ class MealFragment : Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_meal, container, false)
 
-        db = FirebaseFirestore.getInstance()
+        db = DBHelper(requireContext())
+        session = SessionManager(requireContext())
+
         tvEmptyPlan = view.findViewById(R.id.tvEmptyPlan)
         mealContainer = view.findViewById(R.id.mealContainer)
-        var chatbot = view.findViewById<Button>(R.id.btnRegeneratePlan)
+        val chatbot = view.findViewById<Button>(R.id.btnRegeneratePlan)
 
         chatbot.setOnClickListener {
             val intent = Intent(requireContext(), MealChatActivity::class.java)
@@ -41,52 +43,40 @@ class MealFragment : Fragment() {
     }
 
     private fun loadMealPlan() {
-        val user = FirebaseAuth.getInstance().currentUser
-        val userId = user?.uid
-
-        if (userId == null) {
+        val currentUser = session.getCurrentUser()
+        if (currentUser == null) {
             if (isAdded) {
                 Toast.makeText(requireContext(), "⚠️ User not logged in", Toast.LENGTH_SHORT).show()
             }
             return
         }
 
-        db.collection("users")
-            .document(userId)
-            .collection("plans")
-            .document("latest_plan")
-            .get()
-            .addOnSuccessListener { document ->
-                if (document != null && document.exists()) {
-                    val data = document.data
-                    android.util.Log.d("MealFragment", "📦 Firestore Data: $data")
+        val plan = db.getLatestPlan(currentUser)
+        if (plan == null) {
+            Toast.makeText(requireContext(), "No meal plan found.", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-                    if (data != null && data.containsKey("meals")) {
-                        val rawMeals = data["meals"]
-                        android.util.Log.d("MealFragment", "🍽 Raw meals type: ${rawMeals?.javaClass?.name}")
+        val mealsJson = plan.first
+        if (mealsJson.isEmpty()) {
+            Toast.makeText(requireContext(), "No meal plan found.", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-                        val meals = when (rawMeals) {
-                            is List<*> -> rawMeals.mapNotNull {
-                                android.util.Log.d("MealFragment", "➡️ Meal item: $it")
-                                it as? Map<String, Any>
-                            }
-                            else -> emptyList()
-                        }
-
-                        android.util.Log.d("MealFragment", "✅ Parsed meals count: ${meals.size}")
-                        displayMeals(meals)
-                    } else {
-                        Toast.makeText(requireContext(), "No 'meals' field found.", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(requireContext(), "No meal plan found.", Toast.LENGTH_SHORT).show()
-                }
+        try {
+            val array = JSONArray(mealsJson)
+            val meals = mutableListOf<Map<String, Any>>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val map = mutableMapOf<String, Any>()
+                obj.keys().forEach { k -> map[k] = obj.get(k) }
+                meals.add(map)
             }
-            .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "Error loading meal plan: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            displayMeals(meals)
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "Error parsing saved plan: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
-
 
     private fun displayMeals(meals: List<Map<String, Any>>?) {
         if (!isAdded) return

@@ -7,21 +7,21 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+
 class MealChatActivity : AppCompatActivity() {
 
     private lateinit var chatScroll: ScrollView
     private lateinit var chatLayout: LinearLayout
     private lateinit var inputBox: EditText
     private lateinit var sendBtn: ImageButton
-    private lateinit var firestore: FirebaseFirestore
     private lateinit var generativeModel: GenerativeModel
+    private lateinit var db: DBHelper
+    private lateinit var session: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,7 +32,8 @@ class MealChatActivity : AppCompatActivity() {
         inputBox = findViewById(R.id.etMessage)
         sendBtn = findViewById(R.id.btnSend)
 
-        firestore = FirebaseFirestore.getInstance()
+        db = DBHelper(this)
+        session = SessionManager(this)
 
         val appContext = applicationContext
         val aiKey = appContext.packageManager
@@ -95,18 +96,6 @@ class MealChatActivity : AppCompatActivity() {
                         return a JSON object with two fields:
                         1. "meals" → List of meal objects { "day": "Monday", "breakfast": "...", "lunch": "...", "dinner": "..." }
                         2. "grocery_list" → List of ingredients with quantities.
-
-                        Example:
-                        {
-                          "meals": [
-                            {"day":"Monday","breakfast":"Oats","lunch":"Grilled tofu","dinner":"Vegetable curry"}
-                          ],
-                          "grocery_list": [
-                            {"item":"Oats","quantity":"1kg"},
-                            {"item":"Fruits","quantity":"500g"}
-                          ]
-                        }
-
                         User prompt: $prompt
                         """
                         )
@@ -115,7 +104,7 @@ class MealChatActivity : AppCompatActivity() {
 
                 val textResponse = response.text ?: "Sorry, no response."
 
-                // 🧠 Extract JSON substring safely
+                // Extract JSON substring safely
                 val jsonString = textResponse.substringAfter("{", "").substringBeforeLast("}", "")
                     .let { if (it.isNotEmpty()) "{${it}}" else "" }
 
@@ -129,54 +118,37 @@ class MealChatActivity : AppCompatActivity() {
 
                 try {
                     val jsonData = JSONObject(jsonString)
-                    val meals = jsonData.optJSONArray("meals")
-                    val groceryList = jsonData.optJSONArray("grocery_list")
+                    val meals = jsonData.optJSONArray("meals") ?: JSONArray()
+                    val groceryList = jsonData.optJSONArray("grocery_list") ?: JSONArray()
 
-                    // Save both to Firestore
-                    val user = FirebaseAuth.getInstance().currentUser
-                    val userId = user?.uid
+                    // Convert JSONArrays back to strings for storage
+                    val mealsJson = meals.toString()
+                    val groceryJson = groceryList.toString()
 
-                    if (userId == null) {
+                    val currentUser = session.getCurrentUser()
+                    if (currentUser == null) {
                         withContext(Dispatchers.Main) {
                             chatLayout.removeViewAt(chatLayout.childCount - 1)
-                            addMessage("⚠️ User not logged in. Please log in again.", false)
+                            addMessage("⚠️ User not logged in. Please log in.", false)
                         }
                         return@launch
                     }
 
-
-                    val data = hashMapOf(
-                        "meals" to meals?.let { JSONArrayToList(it) },
-                        "grocery_list" to groceryList?.let { JSONArrayToList(it) }
-                    )
-
-                    val db = FirebaseFirestore.getInstance()
-                    db.collection("users")
-                        .document(userId)
-                        .collection("plans")
-                        .document("latest_plan")
-                        .set(data)
-                        .addOnSuccessListener {
-                            lifecycleScope.launch(Dispatchers.Main) {
-                                chatLayout.removeViewAt(chatLayout.childCount - 1)
-                                addMessage("✅ Plan saved successfully for user: $userId!", false)
-                            }
+                    val saved = db.savePlan(currentUser, mealsJson, groceryJson)
+                    withContext(Dispatchers.Main) {
+                        chatLayout.removeViewAt(chatLayout.childCount - 1)
+                        if (saved) {
+                            addMessage("✅ Plan saved locally for user: $currentUser", false)
+                        } else {
+                            addMessage("❌ Failed to save plan locally.", false)
                         }
-                        .addOnFailureListener { e ->
-                            lifecycleScope.launch(Dispatchers.Main) {
-                                chatLayout.removeViewAt(chatLayout.childCount - 1)
-                                addMessage("❌ Failed to save plan: ${e.message}", false)
-                            }
-                        }
-
+                    }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         chatLayout.removeViewAt(chatLayout.childCount - 1)
                         addMessage("⚠️ JSON Parsing Error: ${e.message}\n\nResponse:\n$textResponse", false)
                     }
                 }
-
-
 
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -187,7 +159,7 @@ class MealChatActivity : AppCompatActivity() {
         }
     }
 
-    // Helper: Convert JSONArray → List<Map<String, Any>>
+    // Helper: Convert JSONArray -> List<Map<String, Any>> (kept if you need it)
     private fun JSONArrayToList(array: JSONArray): List<Map<String, Any>> {
         val list = mutableListOf<Map<String, Any>>()
         for (i in 0 until array.length()) {
@@ -199,29 +171,5 @@ class MealChatActivity : AppCompatActivity() {
             list.add(map)
         }
         return list
-    }
-
-    private fun saveToFirestore(response: String) {
-        try {
-            val json = JSONObject(response)
-            val meals = json.getJSONArray("meals")
-            val groceries = json.getJSONArray("grocery_list")
-
-            val data = hashMapOf(
-                "meals" to meals.toString(),
-                "grocery_list" to groceries.toString(),
-                "timestamp" to System.currentTimeMillis()
-            )
-
-            firestore.collection("plans").document("latest").set(data)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Plan saved successfully!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Failed to save plan.", Toast.LENGTH_SHORT).show()
-                }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Parsing error: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
     }
 }

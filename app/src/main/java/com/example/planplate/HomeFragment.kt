@@ -9,8 +9,6 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 class HomeFragment : Fragment() {
 
@@ -25,24 +23,12 @@ class HomeFragment : Fragment() {
         val tvPlan = view.findViewById<TextView>(R.id.tvCurrentPlan)
         val tvGreeting = view.findViewById<TextView>(R.id.tvGreeting)
 
-        // Set greeting text
-        val user = FirebaseAuth.getInstance().currentUser
-        val userId = user?.uid
-
-        if (userId != null) {
-            val db = FirebaseFirestore.getInstance()
-            db.collection("users").document(userId).get()
-                .addOnSuccessListener { document ->
-                    if (document != null && document.exists()) {
-                        val name = document.getString("name") ?: "User"
-                        tvGreeting.text = "Hello, $name 👋"
-                    } else {
-                        tvGreeting.text = "Hello, User 👋"
-                    }
-                }
-                .addOnFailureListener {
-                    tvGreeting.text = "Hello, User 👋"
-                }
+        val session = SessionManager(requireContext())
+        val currentUser = session.getCurrentUser()
+        if (currentUser != null) {
+            val db = DBHelper(requireContext())
+            val name = db.getUserName(currentUser) ?: "User"
+            tvGreeting.text = "Hello, $name 👋"
         } else {
             tvGreeting.text = "Hello, User 👋"
         }
@@ -63,4 +49,3 @@ class HomeFragment : Fragment() {
         return view
     }
 }
-
