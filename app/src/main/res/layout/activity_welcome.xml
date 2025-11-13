@@ -1,0 +1,45 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@color/white">
+
+    <ImageView
+        android:layout_width="140dp"
+        android:layout_height="140dp"
+        android:src="@mipmap/logo_round"
+        android:contentDescription="Plan &amp; Plate Logo"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Eat well, simply."
+        android:textSize="16sp"
+        android:textColor="@color/darker_gray"
+        android:layout_marginBottom="40dp" />
+
+    <Button
+        android:id="@+id/btnGoogle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Continue with Google"
+        android:backgroundTint="#47A76A"
+        android:textColor="@color/white"
+        android:fontFamily="@font/poppins_medium"
+        android:textAllCaps="false"
+        android:paddingVertical="12dp" />
+
+    <Button
+        android:id="@+id/btnEmail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Continue with Email"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="16dp"
+        android:backgroundTint="#47A76A"
+        android:fontFamily="@font/poppins_medium"
+        android:textAllCaps="false" />
+</LinearLayout>

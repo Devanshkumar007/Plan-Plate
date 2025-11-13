@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "77213996342",
+    "project_id": "plan-and-plate-a1dd2",
+    "storage_bucket": "plan-and-plate-a1dd2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:77213996342:android:caa17d4ea9ff2f5153cf97",
+        "android_client_info": {
+          "package_name": "com.example.planplate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD3H5Hq6c1fyWQ28E45FDUC8le_hVWVOTA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
