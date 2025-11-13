@@ -22,17 +22,6 @@
         android:layout_marginBottom="40dp" />
 
     <Button
-        android:id="@+id/btnGoogle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Continue with Google"
-        android:backgroundTint="#47A76A"
-        android:textColor="@color/white"
-        android:fontFamily="@font/poppins_medium"
-        android:textAllCaps="false"
-        android:paddingVertical="12dp" />
-
-    <Button
         android:id="@+id/btnEmail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

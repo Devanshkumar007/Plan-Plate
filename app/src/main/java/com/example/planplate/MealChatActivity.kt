@@ -65,6 +65,7 @@ class MealChatActivity : AppCompatActivity() {
             getDrawable(R.drawable.chat_bubble_user)
         else
             getDrawable(R.drawable.chat_bubble_bot)
+
         textView.setTextColor(
             if (isUser)
                 getColor(R.color.darker_gray)
@@ -87,89 +88,92 @@ class MealChatActivity : AppCompatActivity() {
         addMessage("Thinking...", false)
 
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
+
+            // --- FIXED: Catch SDK errors such as MissingFieldException ---
+            val textResponse = try {
                 val response = generativeModel.generateContent(
                     content {
                         text(
                             """
-                        You are a meal planner AI. Based on the user prompt,
-                        return a JSON object with two fields:
-                        1. "meals" → List of meal objects { "day": "Monday", "breakfast": "...", "lunch": "...", "dinner": "..." }
-                        2. "grocery_list" → List of ingredients with quantities.
-                        User prompt: $prompt
-                        """
+                            You are a meal planner AI. Based on the user prompt,
+                            return a JSON object with two fields:
+                            1. "meals" → List of meals
+                            2. "grocery_list" → ingredient list
+                            
+                            User prompt: $prompt
+                            """
                         )
                     }
                 )
+                response.text ?: ""
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    chatLayout.removeViewAt(chatLayout.childCount - 1)
+                    addMessage("⚠️ AI model is overloaded. Try again later.", false)
+                }
+                return@launch
+            }
 
-                val textResponse = response.text ?: "Sorry, no response."
+            // --- FIXED: Graceful error detection ---
+            if (textResponse.lowercase().contains("error")
+                || textResponse.lowercase().contains("unavailable")
+                || textResponse.lowercase().contains("overloaded")
+                || textResponse.lowercase().contains("503")
+            ) {
+                withContext(Dispatchers.Main) {
+                    chatLayout.removeViewAt(chatLayout.childCount - 1)
+                    addMessage("⚠️ AI model is overloaded. Try again later.", false)
+                }
+                return@launch
+            }
 
-                // Extract JSON substring safely
-                val jsonString = textResponse.substringAfter("{", "").substringBeforeLast("}", "")
-                    .let { if (it.isNotEmpty()) "{${it}}" else "" }
+            // --- Extract JSON safely ---
+            val jsonString = textResponse.substringAfter("{", "").substringBeforeLast("}", "")
+                .let { if (it.isNotEmpty()) "{${it}}" else "" }
 
-                if (jsonString.isEmpty()) {
+            if (jsonString.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    chatLayout.removeViewAt(chatLayout.childCount - 1)
+                    addMessage("⚠️ Couldn't find valid JSON in AI response.", false)
+                }
+                return@launch
+            }
+
+            try {
+                val json = JSONObject(jsonString)
+                val meals = json.optJSONArray("meals") ?: JSONArray()
+                val groceries = json.optJSONArray("grocery_list") ?: JSONArray()
+
+                val currentUser = session.getCurrentUser()
+                if (currentUser == null) {
                     withContext(Dispatchers.Main) {
                         chatLayout.removeViewAt(chatLayout.childCount - 1)
-                        addMessage("⚠️ Couldn't find valid JSON in the response:\n$textResponse", false)
+                        addMessage("⚠️ User not logged in", false)
                     }
                     return@launch
                 }
 
-                try {
-                    val jsonData = JSONObject(jsonString)
-                    val meals = jsonData.optJSONArray("meals") ?: JSONArray()
-                    val groceryList = jsonData.optJSONArray("grocery_list") ?: JSONArray()
+                // Save to SQLite
+                val saved = db.savePlan(
+                    currentUser,
+                    meals.toString(),
+                    groceries.toString()
+                )
 
-                    // Convert JSONArrays back to strings for storage
-                    val mealsJson = meals.toString()
-                    val groceryJson = groceryList.toString()
-
-                    val currentUser = session.getCurrentUser()
-                    if (currentUser == null) {
-                        withContext(Dispatchers.Main) {
-                            chatLayout.removeViewAt(chatLayout.childCount - 1)
-                            addMessage("⚠️ User not logged in. Please log in.", false)
-                        }
-                        return@launch
-                    }
-
-                    val saved = db.savePlan(currentUser, mealsJson, groceryJson)
-                    withContext(Dispatchers.Main) {
-                        chatLayout.removeViewAt(chatLayout.childCount - 1)
-                        if (saved) {
-                            addMessage("✅ Plan saved locally for user: $currentUser", false)
-                        } else {
-                            addMessage("❌ Failed to save plan locally.", false)
-                        }
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        chatLayout.removeViewAt(chatLayout.childCount - 1)
-                        addMessage("⚠️ JSON Parsing Error: ${e.message}\n\nResponse:\n$textResponse", false)
-                    }
+                withContext(Dispatchers.Main) {
+                    chatLayout.removeViewAt(chatLayout.childCount - 1)
+                    if (saved)
+                        addMessage("✅ Plan saved successfully!", false)
+                    else
+                        addMessage("❌ Failed to save plan.", false)
                 }
 
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     chatLayout.removeViewAt(chatLayout.childCount - 1)
-                    addMessage("Error: ${e.message}", false)
+                    addMessage("⚠️ JSON Parsing Error: ${e.message}", false)
                 }
             }
         }
-    }
-
-    // Helper: Convert JSONArray -> List<Map<String, Any>> (kept if you need it)
-    private fun JSONArrayToList(array: JSONArray): List<Map<String, Any>> {
-        val list = mutableListOf<Map<String, Any>>()
-        for (i in 0 until array.length()) {
-            val obj = array.getJSONObject(i)
-            val map = mutableMapOf<String, Any>()
-            obj.keys().forEach { key ->
-                map[key] = obj.get(key)
-            }
-            list.add(map)
-        }
-        return list
     }
 }

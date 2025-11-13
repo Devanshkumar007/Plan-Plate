@@ -11,14 +11,7 @@ class WelcomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_welcome)
 
-        val btnGoogle = findViewById<Button>(R.id.btnGoogle)
         val btnEmail = findViewById<Button>(R.id.btnEmail)
-
-        // Google login removed — button will now redirect to signup
-        btnGoogle.setOnClickListener {
-            val intent = Intent(this, SignUpActivity::class.java)
-            startActivity(intent)
-        }
 
         btnEmail.setOnClickListener {
             startActivity(Intent(this, LoginActivity::class.java))

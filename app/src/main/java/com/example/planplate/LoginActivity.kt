@@ -37,7 +37,12 @@ class LoginActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            if (db.validateUser(email, password)) {
+            val emailPattern = android.util.Patterns.EMAIL_ADDRESS
+            if (!emailPattern.matcher(email).matches()) {
+                Toast.makeText(this, "Please enter a valid email address", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            else if (db.validateUser(email, password)) {
                 session.setCurrentUser(email)
                 Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
 

@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import org.json.JSONArray
+import org.json.JSONObject
 
 class GroceryFragment : Fragment() {
 
@@ -76,13 +77,21 @@ class GroceryFragment : Fragment() {
             }
 
             for (i in 0 until arr.length()) {
-                val itemObj = arr.getJSONObject(i)
-                val item = itemObj.optString("item", "Unknown")
-                val qty = itemObj.optString("quantity", "")
+                val element = arr.get(i)
+
                 val textView = TextView(requireContext()).apply {
-                    text = "✅ $item${if (qty.isNotEmpty()) " - $qty" else ""}"
                     setPadding(12, 8, 12, 8)
                 }
+
+                if (element is JSONObject) {
+                    val item = element.optString("item", element.toString())
+                    val qty = element.optString("quantity", "")
+                    textView.text = "• $item ${if (qty.isNotEmpty()) " - $qty" else ""}"
+                } else {
+                    // element is a simple string
+                    textView.text = "• $element"
+                }
+
                 groceryContainer.addView(textView)
             }
 
